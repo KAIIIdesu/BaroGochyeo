@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>바로고쳐 AR measure</title>
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+:root{--bg:#F5F2EA;--surface:#FCFBF7;--ink:#26332F;--ink2:#69736F;--line:#DADDD7;--brand:#24564B;--coral:#E4775B;
+  --font:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",-apple-system,"Segoe UI",sans-serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}[hidden]{display:none!important}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.5}
+main{max-width:440px;margin:0 auto;padding:22px 18px 40px}
+h1{font-size:24px;margin:14px 0 6px}
+p{margin:0}.muted{color:var(--ink2)}.small{font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
+.btn{display:block;width:100%;border:0;border-radius:14px;padding:15px;font:inherit;font-weight:700;font-size:16px;background:var(--brand);color:var(--surface);margin-top:10px}
+.btn.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--line)}
+.btn:disabled{opacity:.45}
+.big{font-size:56px;font-weight:700;color:var(--brand);line-height:1}
+ol{padding-left:20px;margin:8px 0 0}
+li+li{margin-top:4px}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.ar{position:fixed;inset:0;z-index:50;color:#FCFBF7;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;font-family:var(--font)}
+.ar-top,.ar-foot{pointer-events:auto;background:#26332F}
+.ar-top{display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top,0px)) 14px 12px}
+.ar-live{font-size:30px;font-weight:700}
+.ar-cross{align-self:center;width:34px;height:34px;position:relative}
+.ar-cross::before,.ar-cross::after{content:"";position:absolute;background:#FCFBF7}
+.ar-cross::before{left:16px;top:0;width:3px;height:34px}.ar-cross::after{top:16px;left:0;height:3px;width:34px}
+.ar-foot{border-radius:22px 22px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.ar-foot p{margin:0 0 12px}
+.row{display:flex;gap:8px}
+.ar button{font:inherit;border-radius:12px;padding:12px 16px;font-weight:700;border:1.5px solid #69736F;background:transparent;color:#FCFBF7}
+.ar button.go{background:var(--coral);border-color:var(--coral);flex:1}
+.ar button:disabled{opacity:.4}
+</style>
+</head>
+<body>
+<main>
+  <svg viewBox="0 0 100 100" width="56" height="56" aria-hidden="true"><defs><mask id="c"><rect width="100" height="100" fill="#fff"/><rect x="29" y="10" width="42" height="34" fill="#000"/><path d="M29 56H71V63A7 7 0 0 1 64 70H36A7 7 0 0 1 29 63Z" fill="#000"/><circle cx="40" cy="50" r="3.3" fill="#000"/><circle cx="60" cy="50" r="3.3" fill="#000"/></mask></defs><rect width="100" height="100" rx="18" fill="#FCFBF7"/><rect x="17" y="18" width="66" height="64" rx="6" fill="#24564B" mask="url(#c)"/><circle cx="50" cy="31" r="5" fill="#E4775B"/></svg>
+  <h1>AR measure</h1>
+  <p class="muted">Measure a pothole or crack on the ground by tapping its two edges.</p>
+
+  <div class="card" id="howto">
+    <b>How to measure</b>
+    <ol class="small"><li>Stand on the sidewalk, about 1 m from the hazard.</li><li>Move the phone slowly until a white ring appears on the ground.</li><li>Put the cross on one edge and tap. Then tap the opposite edge.</li></ol>
+  </div>
+
+  <div class="card" id="unsupported" hidden>
+    <b>AR isn't available here</b>
+    <p class="small muted" id="whyNot" style="margin-top:6px"></p>
+  </div>
+
+  <div class="card" id="result" hidden>
+    <p class="muted">Measured size</p>
+    <div class="big" id="resultCm"></div>
+    <p class="small muted" style="margin-top:6px">Accurate to a few centimetres at close range.</p>
+    <button class="btn" id="send" hidden>Send to 바로고쳐</button>
+    <button class="btn ghost" id="copy">Copy size</button>
+  </div>
+
+  <button class="btn" id="start" disabled>Checking AR support…</button>
+  <p class="small muted" id="history" style="margin-top:14px"></p>
+</main>
+
+<div class="ar" id="arOverlay" hidden>
+  <div class="ar-top"><button id="arCancel" type="button">Cancel</button><span class="ar-live" id="arLive" aria-live="polite"></span></div>
+  <div class="ar-cross" aria-hidden="true"></div>
+  <div class="ar-foot"><p id="arMsg">Move your phone slowly over the ground.</p>
+    <div class="row"><button id="arUndo" type="button">Undo</button><button id="arDone" class="go" type="button" disabled>Use this size</button></div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const history = [];
+function arUI(msg, cm, done){ $("#arMsg").textContent = msg; $("#arLive").textContent = cm ? `≈ ${Math.round(cm)} cm` : ""; $("#arDone").disabled = !done; }
+
+async function arMeasure(){
+  const ov = $("#arOverlay"); ov.hidden = false; arUI("Move your phone slowly over the ground.", null, false);
+  let session;
+  try{ session = await navigator.xr.requestSession("immersive-ar", {requiredFeatures:["hit-test"], optionalFeatures:["dom-overlay"], domOverlay:{root:ov}}); }
+  catch(e){ ov.hidden = true; throw e; }
+  const T = THREE;
+  const renderer = new T.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local");
+  const scene = new T.Scene(), camera = new T.PerspectiveCamera();
+  const reticle = new T.Mesh(new T.RingGeometry(0.025, 0.035, 32).rotateX(-Math.PI/2), new T.MeshBasicMaterial({color:0xFCFBF7}));
+  reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
+  const dotMat = new T.MeshBasicMaterial({color:0xE4775B}), lineMat = new T.LineBasicMaterial({color:0xE4775B});
+  const pts = [], marks = []; let line = null, found = false, lastLive = 0;
+  await renderer.xr.setSession(session);
+  const viewer = await session.requestReferenceSpace("viewer");
+  const hitSource = await session.requestHitTestSource({space:viewer});
+  const drawLine = (a,b) => { if(line){ scene.remove(line); line.geometry.dispose(); } line = new T.Line(new T.BufferGeometry().setFromPoints([a,b]), lineMat); scene.add(line); };
+  return new Promise(resolve => {
+    let result = null, ended = false;
+    const finish = cm => { result = cm; if(!ended) session.end(); };
+    const addPoint = () => {
+      if(!reticle.visible || pts.length >= 2) return;
+      const p = new T.Vector3().setFromMatrixPosition(reticle.matrix); pts.push(p);
+      const m = new T.Mesh(new T.SphereGeometry(0.01, 16, 16), dotMat); m.position.copy(p); scene.add(m); marks.push(m);
+      if(pts.length === 2){ drawLine(pts[0], pts[1]); arUI("Looks right? Use this size, or undo and tap again.", pts[0].distanceTo(pts[1])*100, true); if(navigator.vibrate) navigator.vibrate(30); }
+      else arUI("Now tap the opposite edge.", null, false);
+    };
+    const undo = () => { const m = marks.pop(); if(m) scene.remove(m); pts.pop(); if(line){ scene.remove(line); line = null; } arUI(pts.length ? "Now tap the opposite edge." : "Tap one edge of the hazard.", null, false); };
+    const stop = e => e.preventDefault();
+    for(const el of [ov.querySelector(".ar-top"), ov.querySelector(".ar-foot")]) el.addEventListener("beforexrselect", stop);
+    $("#arCancel").onclick = () => finish(null);
+    $("#arUndo").onclick = undo;
+    $("#arDone").onclick = () => finish(pts.length === 2 ? pts[0].distanceTo(pts[1])*100 : null);
+    session.addEventListener("select", () => { addPoint(); if(!session.domOverlayState && pts.length === 2) setTimeout(()=>finish(pts[0].distanceTo(pts[1])*100), 900); });
+    session.addEventListener("end", () => {
+      ended = true; try{ hitSource.cancel(); }catch{} renderer.setAnimationLoop(null); renderer.dispose();
+      for(const el of [ov.querySelector(".ar-top"), ov.querySelector(".ar-foot")]) el.removeEventListener("beforexrselect", stop);
+      ov.hidden = true; resolve(result);
+    });
+    renderer.setAnimationLoop((t, frame) => {
+      if(frame){
+        const hits = frame.getHitTestResults(hitSource);
+        if(hits.length){
+          const pose = hits[0].getPose(renderer.xr.getReferenceSpace());
+          reticle.visible = !!pose; if(pose) reticle.matrix.fromArray(pose.transform.matrix);
+          if(!found && pose){ found = true; arUI("Aim the cross at one edge of the hazard and tap the screen.", null, false); }
+          if(pose && pts.length === 1 && t - lastLive > 120){ const cur = new T.Vector3().setFromMatrixPosition(reticle.matrix); drawLine(pts[0], cur); $("#arLive").textContent = `≈ ${Math.round(pts[0].distanceTo(cur)*100)} cm`; lastLive = t; }
+        } else reticle.visible = false;
+      }
+      renderer.render(scene, camera);
+    });
+  });
+}
+
+function showResult(cm){
+  $("#result").hidden = false; $("#resultCm").textContent = `≈ ${Math.round(cm)} cm`;
+  $("#send").hidden = !window.opener;
+  history.unshift(Math.round(cm));
+  $("#history").textContent = history.length > 1 ? "This session: " + history.map(v => v + " cm").join(", ") : "";
+  $("#start").textContent = "Measure again";
+}
+$("#send").onclick = () => {
+  const cm = history[0]; if(!cm || !window.opener) return;
+  window.opener.postMessage({type:"barogochyeo-ar", cm}, "*");
+  $("#send").textContent = "Sent. You can switch back to 바로고쳐.";
+  $("#send").disabled = true;
+};
+$("#copy").onclick = async () => {
+  const cm = history[0]; if(!cm) return;
+  try{ await navigator.clipboard.writeText(String(cm)); $("#copy").textContent = "Copied"; }catch{ $("#copy").textContent = `${cm} cm`; }
+};
+$("#start").onclick = async () => {
+  $("#send").disabled = false; $("#send").textContent = "Send to 바로고쳐"; $("#copy").textContent = "Copy size";
+  try{ const cm = await arMeasure(); if(cm && cm > 1) showResult(cm); }
+  catch(e){ unsupported("AR couldn't start: " + (e && e.message ? e.message : "unknown error") + ". Check that camera access is allowed for this site."); }
+};
+function unsupported(msg){ $("#unsupported").hidden = false; $("#whyNot").textContent = msg; }
+
+(async () => {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  let ok = false;
+  try{ ok = !!(window.isSecureContext && navigator.xr && await navigator.xr.isSessionSupported("immersive-ar")); }catch{}
+  if(!window.THREE) unsupported("The 3D library didn't load. Check the internet connection and reload.");
+  else if(ok){ $("#start").disabled = false; $("#start").textContent = "Start measuring"; return; }
+  else if(!window.isSecureContext) unsupported("This page must be opened over https.");
+  else if(isIOS) unsupported("iPhone browsers don't support web AR yet. Use an Android phone with Chrome, or measure on the photo in 바로고쳐.");
+  else unsupported("Open this page in Chrome on an Android phone that supports ARCore, and install or update Google Play Services for AR.");
+  $("#start").textContent = "AR not available";
+})();
+</script>
+</body>
+</html>

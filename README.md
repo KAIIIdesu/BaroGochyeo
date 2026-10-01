@@ -2,7 +2,7 @@
 > **Take a photo. Start the solution.**  
 > 사진 한 장으로 시작되는 스마트 도시 안전 해결 솔루션 (AR Civic Reporting & Motion System)
 
-[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen?logo=github)](https://kaiidesu.github.io/BaroGochyeo/)
+[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen?logo=github)](https://kaiiidesu.github.io/BaroGochyeo/)
 [![PWA Ready](https://img.shields.io/badge/PWA-Ready-blue?logo=pwa)](manifest.webmanifest)
 [![License](https://img.shields.io/badge/License-MIT-orange)]()
 
@@ -11,7 +11,7 @@
 ---
 
 ## 🌐 Live Web Demo
-체험 링크: **[https://kaiidesu.github.io/BaroGochyeo/](https://kaiidesu.github.io/BaroGochyeo/)**  
+체험 링크: **[https://kaiiidesu.github.io/BaroGochyeo/](https://kaiiidesu.github.io/BaroGochyeo/)**  
 *(GitHub 저장소의 `Settings` → `Pages`에서 `main` 브랜치 배포 활성화 시 즉시 동작합니다.)*
 
 ---
@@ -20,7 +20,9 @@
 
 **바로고쳐(BaroGochyeo)**는 도로 파손, 포트홀, 파손된 시설물 등 도시 위험 요소를 시민이 스마트폰 카메라로 비추기만 하면 실시간 AR로 자동 감지·측정하고, AI가 민원 공문서를 자동 작성하여 즉각 접수할 수 있도록 돕는 **시민 참여형 스마트 시티 웹 애플리케이션**입니다.
 
-게이미피케이션(포인트 리워드, 주간 3D 포디움 리더보드, 동별 경쟁)과 웹 오디오/모션 피드백을 결합하여 시민들의 자발적 참여를 극대화합니다.
+동별(공개) 경쟁과 개인(비공개) 진행 상황을 분리한 하이브리드 게이미피케이션으로, 중복·허위 신고를 부추기지 않으면서 참여를 돕습니다.
+
+> **로컬 프로토타입**: 모든 데이터는 이 브라우저(Local Storage)에만 저장됩니다. 로그인은 시뮬레이션이며, 동네 점수 시작값과 AI 분석 결과는 샘플 데이터입니다.
 
 ![How It Works Workflow](docs/poster-workflow.png)
 
@@ -41,6 +43,7 @@
 ### 2. 📋 AI 확인 및 검토 화면 (Confirm & Review)
 - **3단계 프로그레스 바**: `1. Detect` → `2. Review` → `3. Submit`
 - **현장 사진 교체 기능**: `📷 Change Photo`
+- **민원문 자동 작성** (독립 실행 프로토타입에서는 샘플 AI 결과로 표시)
 - **AI 생성 민원문**: 자동 생성된 행정 양식 문구 및 원클릭 복사 (`📋 Copy`)
 - **위험도 및 관할 배정**: High / Medium / Low 변경 및 담당 부서(양천구 도로관리과) 자동 배정 안내
 - **안전신문고 연동**: 정부 '안전신문고(Safety e-Report)' 바로가기 지원
@@ -51,12 +54,19 @@
 - **주간 목표 게이지**: 신월1동 / 양천구 주간 목표 달성률 실시간 반영
 - **웹 오디오 & 햅틱 반응**: Web Audio API 기반 신디사이저 사운드(셔터음, 탭 효과음, 축하 팡파레) 및 기기 진동 지원
 
-### 4. 🏆 듀얼 탭 주간 리더보드 (Weekly Leaderboard & 3D Podium)
-- **동별 랭킹 (Neighborhoods)**: 신월1동(+30 기여), 양천구, 목동 등
-- **시민 랭킹 (People)**: 시민 리포터 순위표 및 내 랭킹 하이라이트
-- **3D 포디움 단상**: 1위(Gold), 2위(Silver), 3위(Bronze) 3D 입체 단상 & 골드 스윕 시머 효과
-- **주간 리셋 카운트다운 타이머**: `Resets in 2d 14h`
-- **임팩트 축하 배너**: *"Your report moved Sinwol-dong to #1!"*
+### 4. 🏘️ 동네(Neighborhood) 탭 — 동별 주간 리더보드
+- **동별 랭킹만 공개**: 개인 이름이 나오는 공개 랭킹은 없습니다.
+- **포디움**: 1위(머스터드·중앙·가장 높음), 2위(블루), 3위(코랄) + 4위 이하 카드 리스트
+- **우리 동네 카드**: 현재 순위, 점수, 월요일 이후 순위 변동
+- **공유 주간 미션**: 적격 신고 `7 / 10`, 남은 시간, 미션 상세 화면
+- **커뮤니티 임팩트**: 우리 동네의 수리 완료 / 처리 중 / 대기 건수
+- **샘플 데이터 표기**: 동네 점수의 시작값은 "Sample neighborhood data"로 표시되는 결정적(deterministic) 주간 샘플이며, 이 기기의 신고가 그 위에 더해집니다.
+
+### 4-1. 👤 나(Me) 탭 — 비공개 개인 진행 상황
+- **데모 계정**: 스플래시 → 환영 화면 → 로그인 / 계정 만들기 / 게스트로 계속 (로컬 데모, 비밀번호 없음, 서버 없음)
+- **점수 구분**: 사용 가능 포인트 · 총 기여 · 이번 주 · 동네 점수 · 미션 진행도를 서로 다른 값으로 표시 (ⓘ 설명 시트)
+- **개인 주간 미션 3개**: 상세 신고 1건 / 상태 변경 확인 / 동네 미션 기여 — 주 1회 한도, 포인트 없음
+- **배지 5종**, 내 신고, 리워드, 효과음 설정
 
 ### 5. 🛠️ 별도 모듈 및 PWA 지원
 - **AR 거리/치수 측정기 (`ar-measure.html`)**: WebXR 및 인터랙티브 탭 기반 2점 거리 실측 도구
@@ -74,29 +84,32 @@
 
 ---
 
+### 마스코트 에셋 백로그 (Mascot asset backlog)
+앱은 `index.html`에 포함된 깨끗한 포즈 6종(front, three, idle, walk, inspect, tap)만 사용합니다. 라벨이 있는 시트(`docs/mascot-expressions.png`)는 잘라 쓰지 않습니다. 디자인팀이 투명 배경 단독 파일로 내보내야 할 항목:
+
+- 표정: Happy, Excited, Proud, Thinking, Focused, Surprised, Worried, Sad, Confused, Relieved
+- 포즈: **Proud** (배지 획득 · 미션 완료), **Working** (미션 상세 · 진행 중)
+
+---
+
 ## 📁 프로젝트 파일 구조 (Project Structure)
 
 ```text
 BaroGochyeo/
-├── index.html              # 메인 웹 애플리케이션 (AR HUD, 리더보드, 리포트)
-├── ar-measure.html         # WebXR / 인터랙티브 AR 치수 측정 독립 페이지
-├── motion.css              # 모션 디자인 시스템 및 반응형 스타일시트
-├── motion.js               # AR HUD 제어, 사운드, 3D 포디움, 인터랙션 로직
-├── game-juice.js           # 색종이 폭죽, 포인트 애니메이션, 햅틱 피드백
+├── index.html              # 메인 앱: 화면 마크업, 디자인 토큰, 신고·지도·리워드 핵심 로직, 로컬 데이터 런타임
+├── progress.js             # 점수 · 미션 · 배지 · 리더보드 계산 (순수 함수, UI 없음)
+├── auth-mock.js            # 데모 인증 어댑터 (로컬 전용, 실제 백엔드로 교체할 파일)
+├── game-juice.js           # 모션, 카메라 상태, 성공 화면, 동네 탭, 주간 미션
+├── shell.js                # 스플래시, 환영/로그인/가입, 나(Me) 탭, 개인 미션, 배지, 점수 설명
+├── motion.css              # 모션 디자인 시스템, 인터랙션 상태
+├── shell.css               # 내비게이션, 카메라 HUD, 동네, 성공, 프로필, 게이트 스타일
+├── ar-measure.html         # WebXR AR 치수 측정 독립 페이지
+├── motion.js               # (미사용) 이전 버전 스크립트 — index.html에서 로드하지 않음
 ├── manifest.webmanifest    # PWA 설정 매니페스트
-├── icons/                  # PWA 앱 아이콘 (192x192, 512x512)
-│   ├── icon-192.png
-│   └── icon-512.png
-├── docs/                   # 프레젠테이션 포스터 및 시각 디자인 자료
-│   ├── poster-overview.png
-│   ├── poster-workflow.png
-│   ├── poster-street-ar.png
-│   ├── mascot-expressions.png
-│   └── mascot-poses.png
-├── reports/                # 개선 전/후 UI 비교 스크린샷
-│   └── screenshots/
-├── .gitignore              # 시스템 및 캐시 파일 제외 설정
-└── README.md               # 프로젝트 안내 문서
+├── icons/                  # PWA 앱 아이콘
+├── docs/                   # 포스터 및 마스코트 디자인 자료
+├── reports/screenshots/    # UI 스크린샷 (v2/ = 현재 버전)
+└── README.md
 ```
 
 ---
@@ -121,7 +134,7 @@ BaroGochyeo/
 2. 상단 메뉴 **Settings** 클릭
 3. 좌측 사이드바 **Pages** 클릭
 4. **Build and deployment** > **Branch**에서 `main` 브랜치 선택 및 `/(root)` 선택 후 **Save** 클릭
-5. 약 1분 후 생성되는 배포 주소(`https://kaiidesu.github.io/BaroGochyeo/`)로 누구나 바로 접속 가능합니다.
+5. 약 1분 후 생성되는 배포 주소(`https://kaiiidesu.github.io/BaroGochyeo/`)로 누구나 바로 접속 가능합니다.
 
 ---
 

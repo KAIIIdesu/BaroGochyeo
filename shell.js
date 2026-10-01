@@ -1,4 +1,4 @@
-/* BaroGochyeo — app shell: splash, welcome, demo sign-in, Me, personal missions, badges, score explainer.
+/* BaroGochyeo — app shell: splash, welcome, demo sign-in, Me, personal missions, Achievement Coins, score explainer.
    Authentication goes through BGAuth (auth-mock.js); all numbers come from BGProgress (progress.js). */
 (() => {
   "use strict";
@@ -19,14 +19,8 @@
     m_shared: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.3"/><path d="M3 20c.7-3.4 3-5 6-5s5.300 1.600 6 5M15.500 15.200c2.700-.4 4.700.900 5.500 3.800"/></svg>',
     sound: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>'
   };
-  const BADGE_ICON = {
-    first: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
-    measured: '<path d="M3 16l13-13 5 5L8 21z"/><path d="M8 11l2 2M11 8l2 2M14 5l2 2"/>',
-    follow: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
-    repaired: '<path d="M14 6a4 4 0 0 0-5 5l-6 6 3 3 6-6a4 4 0 0 0 5-5l-2.5 2.5-2-2z"/>',
-    week: '<path d="M12 3l2.7 5.6 6.1.8-4.5 4.3 1.1 6.1L12 16.9 6.6 19.8l1.1-6.1L3.2 9.4l6.1-.8z"/>'
-  };
-  const badgeIcon = id => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">${BADGE_ICON[id] || BADGE_ICON.week}</svg>`;
+  const COIN_IDS = ["first-report", "measured", "follow-through", "issue-resolved"];
+  const coinArt = (id, earned, cls = "") => `<img class="coin-art ${cls}" src="assets/coins/${id}-${earned ? "earned" : "locked"}.png" alt="" width="1254" height="1254">`;
 
   /* ================= Optional sound + haptics ================= */
   const SOUND_KEY = "bg_sound";
@@ -50,14 +44,33 @@
   const gate = q("#gate"), app = q("#app");
 
   /* ================= Private progress (per namespace) ================= */
-  const blank = () => ({id: "progress", kind: "progress", seen: {}, reviewWeeks: [], fullWeeks: [], badgesSeen: null, badgeAt: {}});
+  const blank = () => ({id: "progress", kind: "progress", seen: {}, reviewWeeks: [], fullWeeks: [], badgesSeen: null, badgeAt: {}, coinsVersion: 0, coins: {}});
   const progress = () => ({...blank(), ...(S.mine.get("progress") || {})});
   const weekStartMs = () => weekStart() - 9 * 3600e3; /* Monday 00:00 KST as a real timestamp */
   const prevWeekKey = () => new Date(weekStart() - P.WEEK_MS).toISOString().slice(0, 10);
   const statusNow = r => r.reversed ? "rejected" : issueStatus(r);
   const hasUpdate = r => statusNow(r) !== (progress().seen?.[r.id] ?? "submitted");
-  const badgeList = c => P.badges({...c, missionsDone: P.missions(c).filter(m => m.done).length});
-  const context = (p = progress()) => ({reports: myReports(), weekStart: weekStartMs(), progress: p, week: weekKey(), prevWeek: prevWeekKey(), sharedProgress: P.goalProgress(S.board, myDong()), hasUpdate});
+  const coinList = c => P.coins(c);
+  const context = (p = progress()) => ({reports: myReports(), statusOf: statusNow, weekStart: weekStartMs(), progress: p, week: weekKey(), prevWeek: prevWeekKey(), sharedProgress: P.goalProgress(S.board, myDong()), hasUpdate});
+  const LEGACY_IDS = {first:"first-report", "first-report":"first-report", measured:"measured", follow:"follow-through", "follow-through":"follow-through", repaired:"issue-resolved", "repair-made":"issue-resolved", "problem-solved":"issue-resolved", "issue-resolved":"issue-resolved"};
+  function migrateCoins(p){
+    if(p.coinsVersion >= 1) return p;
+    const coins = {...(p.coins || {})}, seen = p.badgesSeen || [], dates = p.badgeAt || {};
+    for(const [old, id] of Object.entries(LEGACY_IDS)){
+      const oldData = p.badges?.[old] || p.achievements?.[old];
+      if(!seen.includes(old) && !dates[old] && !oldData?.earned) continue;
+      const prev = coins[id] || {};
+      coins[id] = {...prev, id, progress: 1, earned: true, earnedAt: prev.earnedAt || oldData?.earnedAt || dates[old] || null,
+        celebrationSeen: true, detailViewed: prev.detailViewed ?? true};
+    }
+    if((p.reviewWeeks || []).length && !coins["follow-through"]?.earned)
+      coins["follow-through"] = {id:"follow-through", progress:1, earned:true, earnedAt:null, celebrationSeen:true, detailViewed:true};
+    for(const b of coinList(context({...p, coins}))){
+      if(b.earned && !coins[b.id]?.earned) coins[b.id] = {id:b.id, progress:1, earned:true, earnedAt:null, celebrationSeen:true, detailViewed:true};
+    }
+    for(const id of COIN_IDS) if(!coins[id]) coins[id] = {id, progress:0, earned:false, earnedAt:null, celebrationSeen:false, detailViewed:false};
+    const next = {...p, coinsVersion:1, coins}; saveMine(next); return next;
+  }
 
   /* Called when a report detail opens. The "check a status change" mission only counts when the
      status differs from what this person saw last time, and only once per visit. */
@@ -70,6 +83,7 @@
       if(v.first){
         v.change = {from: seen, to: st};
         if(!next.reviewWeeks.includes(weekKey())){ next.reviewWeeks = [...next.reviewWeeks, weekKey()]; setTimeout(() => { toast("Status checked. Weekly mission complete."); cue("tick"); }, 300); }
+        next.followUpSeen = true;
         J.announce(`Status update. This report is now ${STATUS_LABEL[st] || st}.`);
       }
       saveMine(next);
@@ -77,24 +91,31 @@
     v.first = false;
     return v.change && v.change.to === st ? v.change : null;
   }
-  /* Returns badges earned since the last look and marks them as seen, so a celebration plays once. */
+  /* Persist the transition before showing it, so refresh and Success re-entry cannot replay it. */
   function collectUnlocks(){
-    if(!S.mineReady || !S.mine.has("progress")) return [];
-    const p = progress(); let dirty = false;
+    if(!S.mineReady) return [];
+    const p = migrateCoins(progress()); let dirty = false;
     if(P.missions(context(p)).every(m => m.done) && !p.fullWeeks.includes(weekKey())){ p.fullWeeks = [...p.fullWeeks, weekKey()]; dirty = true; }
-    const earned = badgeList(context(p)).filter(b => b.earned), seen = p.badgesSeen || [];
-    const fresh = earned.filter(b => !seen.includes(b.id));
-    if(fresh.length){ p.badgesSeen = [...seen, ...fresh.map(b => b.id)]; p.badgeAt = {...(p.badgeAt || {}), ...Object.fromEntries(fresh.map(b => [b.id, Date.now()]))}; dirty = true; S.justUnlocked = {ids: fresh.map(b => b.id), at: Date.now()}; }
+    const fresh = [];
+    for(const b of coinList(context(p))){
+      const old = p.coins[b.id] || {id:b.id, progress:0, earned:false, earnedAt:null, celebrationSeen:false, detailViewed:false};
+      const next = {...old, progress:b.earned ? 1 : b.have, earned:!!b.earned};
+      if(b.earned && !old.earned){ next.earnedAt = Date.now(); next.celebrationSeen = true; next.detailViewed = false; fresh.push({...b, at:next.earnedAt}); }
+      if(JSON.stringify(old) !== JSON.stringify(next)){ p.coins[b.id] = next; dirty = true; }
+    }
+    if(fresh.length) S.justUnlocked = {ids: fresh.map(b => b.id), at: Date.now()};
     if(dirty) saveMine(p);
     return fresh;
   }
   /* First time a namespace is seen: record what is already earned, without celebrating it. */
   function ensureBaseline(){
     if(!S.mineReady || S.mine.has("progress") || !S.uid) return;
-    const p = blank(); p.badgesSeen = badgeList(context(p)).filter(b => b.earned).map(b => b.id); saveMine(p);
+    const p = blank(); p.coinsVersion = 1;
+    for(const b of coinList(context(p))) p.coins[b.id] = {id:b.id, progress:b.earned ? 1 : 0, earned:b.earned, earnedAt:null, celebrationSeen:b.earned, detailViewed:b.earned};
+    saveMine(p);
   }
   const baseRender = window.render;
-  window.render = function(){ baseRender(); ensureBaseline(); };
+  window.render = function(){ baseRender(); ensureBaseline(); if(S.mineReady && S.mine.has("progress")) migrateCoins(progress()); };
 
   /* ================= Score explainer ================= */
   function scoreInfo(){
@@ -114,8 +135,8 @@
 
   /* ================= Me ================= */
   const stateText = m => m.done ? "Completed" : `${m.count} / 1`;
-  const BADGE_STATE = {earned: "Earned", progress: "In progress", new: "Not started"};
-  const confettiBits = () => `<span class="pop-bits" aria-hidden="true">${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<i style="--a:${i * 45}deg;--c:var(--${["mustard", "sage", "coral", "blue"][i % 4]})"></i>`).join("")}</span>`;
+  const COIN_STATE = {earned: "Earned", progress: "In progress", new: "Not started"};
+  const coinBits = () => `<span class="coin-particles" aria-hidden="true">${[0,1,2,3,4,5].map(i => `<i style="--a:${i * 60}deg"></i>`).join("")}</span>`;
   function objective(m){
     return `<li class="obj ${m.done ? "done" : ""} ${m.recommended ? "rec" : ""}"><span class="obj-icon i-${m.id}" aria-hidden="true">${ICON["m_" + m.id]}</span>
       <div class="obj-copy"><b>${esc(m.title)}</b><small>${esc(m.note)}</small></div>
@@ -132,29 +153,47 @@
         ${m.recommended ? `<button class="btn small" data-go="${m.action.go}" aria-label="${m.action.label}">${m.action.short}</button>` : `<button class="btn small soft" data-go="me">Details</button>`}</section>`;
   }
   const baseHome = window.renderHome;
-  window.renderHome = function(){ baseHome(); renderNext(); };
-  function badgeTile(b, hot){
-    const line = b.state === "earned" ? "Earned" : b.state === "progress" ? `${b.have} / ${b.need}` : "Not started";
-    return `<li><button class="badge-btn ${b.state} ${hot ? "just-unlocked" : ""}" data-shell="badge" data-id="${b.id}" aria-label="${esc(b.name)} badge, ${BADGE_STATE[b.state]}${b.state === "progress" ? `, ${b.have} of ${b.need}` : ""}. Open details.">
-      <span class="badge-medal" data-badge="${b.id}" aria-hidden="true">${badgeIcon(b.id)}${b.state === "earned" ? `<span class="medal-check">${ICON.check}</span>` : ""}</span><b>${esc(b.name)}</b><small>${line}</small></button></li>`;
+  function renderNewCoinHome(){
+    const box = q("#newCoinHome"); if(!box) return; if(!S.mineReady){ box.innerHTML = ""; return; }
+    const p = progress(), b = coinList(context(p)).find(c => c.earned && !p.coins?.[c.id]?.detailViewed && !p.coins?.[c.id]?.homeDismissed);
+    box.innerHTML = b ? `<div class="new-coin-home">${coinArt(b.id,true)}<span>New Achievement Coin<b>${esc(b.name)}</b></span><button class="btn small soft" data-shell="coin" data-id="${b.id}">View</button><button class="icon-btn" data-shell="dismissCoin" data-id="${b.id}" aria-label="Dismiss ${esc(b.name)} notification">×</button></div>` : "";
   }
-  const dateText = t => new Date(t).toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric"});
-  function badgeSheet(id, celebrate){
-    const b = badgeList(context()).find(x => x.id === id); if(!b) return;
-    openSheet(`<div class="badge-sheet ${b.state} ${celebrate ? "celebrate" : ""}">
-      ${celebrate ? `<div class="badge-cheer">${mImg("three")}${confettiBits()}</div><p class="success-card-label">Badge unlocked</p>` : ""}
-      <span class="badge-medal lg" data-badge="${b.id}" aria-hidden="true">${badgeIcon(b.id)}</span>
-      <h2>${esc(b.name)}</h2><span class="badge-state">${BADGE_STATE[b.state]}${b.state === "earned" && b.at ? ` · ${dateText(b.at)}` : ""}</span>
-      <p class="badge-mean">${esc(b.note)}</p>
-      <dl class="badge-facts"><div><dt>How to unlock</dt><dd>${esc(b.req)}</dd></div><div><dt>Progress</dt><dd class="num">${b.have} / ${b.need}</dd></div></dl>
-      <p class="small muted">Badges are permanent. They never reset and can't be spent.</p></div>
-      <button class="btn" data-act="closeSheet">${celebrate ? "Nice" : "Close"}</button>`);
+  window.renderHome = function(){ baseHome(); renderNext(); renderNewCoinHome(); };
+  function coinTile(b){
+    const line = COIN_STATE[b.state];
+    return `<li><button class="coin-btn ${b.state}" data-shell="coin" data-id="${b.id}" aria-label="${esc(b.name)} Achievement Coin, ${line}${b.state === "progress" ? `, ${b.have} of ${b.need}` : ""}. Open details.">
+      ${coinArt(b.id, b.earned)}<b>${esc(b.name)}</b><span class="coin-state">${line}</span>${b.state === "progress" ? `<small class="coin-progress">${b.have} / ${b.need}</small>` : ""}${b.earned && !b.viewed ? `<span class="coin-new">New</span>` : ""}</button></li>`;
+  }
+  const dateText = t => new Date(t).toLocaleDateString("en-US", {month: "long", day: "numeric", year: "numeric"});
+  function coinSheet(id){
+    const b = coinList(context()).find(x => x.id === id); if(!b) return;
+    const p = progress(), old = p.coins[id] || {};
+    if(b.earned && !old.detailViewed){ p.coins = {...p.coins, [id]:{...old, detailViewed:true}}; saveMine(p); renderNewCoinHome(); }
+    openSheet(`<div class="coin-sheet ${b.state}">
+      ${coinArt(b.id, b.earned, "large")}
+      <h2>${esc(b.name)}</h2><p class="coin-field-label">Meaning</p><p id="coinDescription" class="coin-meaning">${esc(b.note)}</p>
+      <dl class="coin-facts"><div><dt>How to unlock</dt><dd>${esc(b.req)}</dd></div><div><dt>Progress</dt><dd>${b.have} / ${b.need}</dd></div><div><dt>Status</dt><dd>${b.earned ? b.at ? `Earned on ${dateText(b.at)}` : "Earned" : COIN_STATE[b.state]}</dd></div></dl></div>
+      <button class="btn" data-act="closeSheet">Close</button>`);
+    q("#sheet").setAttribute("aria-describedby", "coinDescription");
+  }
+  function coinInfo(){ openSheet(`<h2>Achievement Coins</h2><p id="coinDescription" class="coin-meaning">Achievement Coins celebrate lasting contributions. They are separate from points and do not reset.</p><button class="btn" data-act="closeSheet">Close</button>`); q("#sheet").setAttribute("aria-describedby", "coinDescription"); }
+  function unlockCard(b){
+    return `<section class="coin-unlock" aria-label="Achievement Coin earned"><div class="coin-flip" data-id="${b.id}" aria-hidden="true">${coinArt(b.id,false,"coin-silver")}${coinArt(b.id,true,"coin-color")}${coinBits()}</div><div class="coin-unlock-copy"><p>Achievement Coin earned</p><h3>${esc(b.name)}</h3></div><button class="btn small soft" data-shell="coin" data-id="${b.id}">View</button></section>`;
+  }
+  function celebrateCoins(list){ if(!list.length) return; cue("unlock"); J.announce(`Achievement Coin earned: ${list.map(b=>b.name).join(", ")}`); }
+  function markMeasurement(cm){
+    if(!(cm > 1 && cm < 2000) || !S.mineReady) return null;
+    const p = migrateCoins(progress()), id = "measured";
+    if(p.coins[id]?.earned) return null;
+    p.coins = {...p.coins, [id]:{id, progress:1, earned:true, earnedAt:Date.now(), celebrationSeen:true, detailViewed:false}};
+    saveMine(p);
+    return coinList(context(p)).find(b => b.id === id);
   }
   function avatar(style, cls = ""){ return `<span class="avatar av-${esc(style || "sage")} ${cls}" aria-hidden="true"><img src="${MASCOT.front}" alt=""></span>`; }
   function renderMe(){
     const body = q("#meBody"); if(!body) return;
-    const me = A.session(), sc = scores(), c = context(), ms = P.missions(c), bs = badgeList(c), last = P.lastWeek(c);
-    const fresh = collectUnlocks(), hot = S.justUnlocked && Date.now() - S.justUnlocked.at < 2600 ? S.justUnlocked.ids : [];
+    const fresh = collectUnlocks();
+    const me = A.session(), sc = scores(), c = context(), ms = P.missions(c), bs = coinList(c), last = P.lastWeek(c);
     const reports = myReports(), updates = reports.filter(hasUpdate).length, earned = bs.filter(b => b.earned).length;
     const open = document.activeElement?.closest?.("#meBody [data-shell]")?.dataset.shell;
     body.innerHTML = `
@@ -166,7 +205,8 @@
         <div class="section-head" style="margin:0"><h3>My points</h3><button class="icon-btn info-btn" data-act="scoreInfo" aria-label="How points and scores work">${ICON.info}</button></div>
         <div class="stat-main"><span>Available points</span><b class="num">${fmt(sc.available)}</b>${sc.pending ? `<small>+${fmt(sc.pending)} pending until the district receives your report</small>` : ""}</div>
         <div class="stat-row"><div><span>This week</span><b class="num">+${fmt(sc.week)}</b></div>${sc.total !== sc.available ? `<div><span>Total contribution</span><b class="num">${fmt(sc.total)}</b></div>` : ""}
-          <div><span>Eligible reports</span><b class="num">${sc.eligibleWeek}<small> this week</small></b></div></div>
+           <div><span>Eligible reports</span><b class="num">${sc.eligibleWeek}<small> this week</small></b></div></div>
+         <p class="coin-summary">Achievement Coins <b>${earned} / 4</b></p>
       </section>
       <section aria-label="Weekly missions">
         <div class="section-head"><h3>Weekly missions</h3><span class="small muted">${J.shortLeft(new Date(weekKey() + "T00:00:00+09:00").getTime() + P.WEEK_MS - Date.now())}</span></div>
@@ -175,9 +215,9 @@
         <p class="obj-foot">Recognition only. No points, one completion each per week.</p>
         ${me ? "" : `<p class="obj-foot guest-note">Sign in to keep your progress across sessions.</p>`}
       </section>
-      <section class="shelf" aria-label="Badges">
-        <div class="section-head"><h3>Badges</h3><span class="small muted">${earned} of ${bs.length} earned</span></div>
-        <ul class="badge-row">${bs.map(b => badgeTile(b, hot.includes(b.id))).join("")}</ul>
+       <section class="coin-shelf" aria-label="Achievement Coins">
+         <div class="section-head"><h3>Achievement Coins</h3><span class="coin-count">${earned} of 4 earned</span><button class="icon-btn info-btn" data-shell="coinInfo" aria-label="About Achievement Coins">${ICON.info}</button></div>
+         <ul class="coin-grid">${bs.map(coinTile).join("")}</ul>
       </section>
       <section class="menu" aria-label="My activity">
         <button class="item" data-go="reports"><span class="thumb">${ICON.doc}</span><span class="t"><b>My reports</b><span class="small muted">${reports.length} report${reports.length === 1 ? "" : "s"}</span></span>${updates ? `<span class="chip update-chip">${updates} update${updates > 1 ? "s" : ""}</span>` : ""}<span aria-hidden="true">→</span></button>
@@ -190,8 +230,7 @@
       ${me ? `<button class="btn ghost" data-shell="logout">Log out</button>` : ""}
       <div class="prototype-note" role="note"><b>Local prototype</b><span>${me ? "This demo profile and its reports live only in this browser. Nothing is synced or password-protected." : "Guest reports live only in this browser."}</span></div>`;
     if(open) body.querySelector(`[data-shell="${open}"]`)?.focus({preventScroll: true});
-    if(fresh.length){ cue("unlock"); J.announce(`Badge unlocked: ${fresh.map(b => b.name).join(", ")}`);
-      if(S.screen === "me" && !q("#veil").classList.contains("on") && gate.hidden) badgeSheet(fresh[0].id, true); else toast(`Badge unlocked: ${fresh.map(b => b.name).join(", ")}`); }
+     if(fresh.length){ celebrateCoins(fresh); if(S.screen === "me" && !q("#veil").classList.contains("on") && gate.hidden) coinSheet(fresh[0].id); }
   }
   window.renderMe = renderMe;
 
@@ -221,7 +260,7 @@
   }
   const gateTop = title => `<div class="top"><button class="back" data-shell="gateBack" aria-label="Back">${ICON.back}</button><h1 tabindex="-1">${title}</h1></div>`;
   async function guestHasData(){
-    try{ const snap = await S.db?.collection(`data/users/${A.GUEST_NS}`).get(); return !!snap?.docs.some(d => ["report", "redemption"].includes(d.data()?.kind)); }catch{ return false; }
+    try{ const snap = await S.db?.collection(`data/users/${A.GUEST_NS}`).get(); return !!snap?.docs.some(d => { const p=d.data(); return ["report", "redemption"].includes(p?.kind) || (p?.kind === "progress" && (Object.values(p.coins || {}).some(c => c.earned) || (p.reviewWeeks || []).length || (p.fullWeeks || []).length || (p.badgesSeen || []).length)); }); }catch{ return false; }
   }
   async function registerView(){
     const keep = !A.session() && await guestHasData(), home = myDong();
@@ -232,7 +271,7 @@
         <div class="field"><label for="rEmail">Email-shaped demo ID</label><input id="rEmail" name="email" type="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="you@example.com" required><p class="field-hint">Used as a label only. No email is sent.</p></div>
         <div class="field"><label for="rDong">Neighborhood</label><select id="rDong" name="dong">${DONGS.map(d => `<option ${d.en === home ? "selected" : ""}>${esc(d.en)}</option>`).join("")}</select></div>
         <fieldset class="field"><legend>Profile style</legend><div class="avatar-pick">${A.AVATARS.map((a, i) => `<label><input type="radio" name="avatar" value="${a}" ${i ? "" : "checked"}><span class="sr-only">${a}</span>${avatar(a)}</label>`).join("")}</div></fieldset>
-        ${keep ? `<label class="check"><input type="checkbox" name="keep" checked><span><b>Keep my current reports and progress</b><small>Moves your guest reports, points, missions and badges into this account, once.</small></span></label>` : ""}
+         ${keep ? `<label class="check"><input type="checkbox" name="keep" checked><span><b>Keep my current reports and progress</b><small>Moves your guest reports, points, missions and Achievement Coins into this account, once.</small></span></label>` : ""}
         <button class="btn lg" type="submit">Create account</button>${DEMO_NOTE}
       </form>`, "gate-form-view");
   }
@@ -299,7 +338,9 @@
     if(a === "guest"){ A.continueAsGuest(); return closeGate(() => J.enterHome()); }
     if(a === "gateBack"){ if(A.entered()) return closeGate(); return welcome(); }
     if(a === "pickAccount"){ const form = el.closest("form"); form.elements.email.value = el.dataset.email; return submitForm(form); }
-    if(a === "badge") return badgeSheet(el.dataset.id, false);
+    if(a === "coin") return coinSheet(el.dataset.id);
+    if(a === "coinInfo") return coinInfo();
+    if(a === "dismissCoin"){ const p=progress(), old=p.coins?.[el.dataset.id]; if(old){ p.coins={...p.coins,[el.dataset.id]:{...old,homeDismissed:true}}; saveMine(p); renderNewCoinHome(); } return; }
     if(a === "sound"){ const on = !soundOn(); window.BGFx.setSound(on); el.setAttribute("aria-checked", String(on)); if(on) cue("tick"); J.announce(on ? "Sound effects on" : "Sound effects off"); return; }
     if(a === "logout"){ busy(el, true, "Logging out…"); await A.signOut(); BG.bindUser(A.namespace()); window.go("me"); toast("Logged out. You're browsing as a guest."); return; }
   });
@@ -310,6 +351,6 @@
       if(!gate.contains(document.activeElement)){ e.preventDefault(); f[0].focus(); } else if(e.shiftKey && document.activeElement === f[0]){ e.preventDefault(); f.at(-1).focus(); } else if(!e.shiftKey && document.activeElement === f.at(-1)){ e.preventDefault(); f[0].focus(); } }
   });
 
-  window.BGShell = {hasUpdate, noteViewed, collectUnlocks, scoreInfo, badgeIcon, badgeSheet, renderMe, renderNext, splash, welcome};
+  window.BGShell = {hasUpdate, noteViewed, collectUnlocks, markMeasurement, scoreInfo, coinArt, unlockCard, celebrateCoins, coinSheet, renderMe, renderNext, splash, welcome};
   splash();
 })();

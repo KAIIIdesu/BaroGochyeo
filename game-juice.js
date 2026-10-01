@@ -159,10 +159,10 @@
   /* ================= Camera ================= */
   const baseOpenScan = window.openScan, baseCloseScan = window.closeScan;
   const SCAN_STATES = ["locked", "camera-flash", "closing", "state-analyzing", "state-detected", "state-ready", "state-error", "state-blocked"];
-  window.openScan = async function(){
+  window.openScan = async function(keep){
     const scan = q("#scan"), reticle = q("#reticle"); scan.classList.remove(...SCAN_STATES); scan.classList.add("state-scanning"); reticle.removeAttribute("style");
     scanFrom = document.activeElement;
-    const result = baseOpenScan(); replay(scan, "on"); return result;
+    const result = baseOpenScan(keep); replay(scan, "on"); return result;
   };
   let scanFrom = null;
   window.closeScan = function(){ baseCloseScan(); q("#scan").classList.remove(...SCAN_STATES, "state-scanning"); scanFrom?.focus?.({preventScroll: true}); scanFrom = null; };
@@ -230,18 +230,18 @@
     if(!d.motionReviewOpened){ d.motionReviewOpened = true; body.classList.add("review-enter"); [...body.children].forEach((el, i) => el.style.setProperty("--review-delay", `${Math.min(i * 65, 390)}ms`)); } else body.classList.remove("review-enter");
     const fields = [...body.querySelectorAll(".fields .f")], map = {type: fields[0], risk: fields[1], size: fields[2]}; if(map[d.motionEdited]) replay(map[d.motionEdited], "motion-highlight");
     const p = pointsFor(d), changed = d.motionPreviousPoints !== undefined && d.motionPreviousPoints !== p.total; body.querySelectorAll(".ledger .li b").forEach(el => el.classList.add("points-value"));
-    const btn = body.querySelector('[data-act="submit"]'); if(btn) btn.innerHTML = `<span>${d.dup ? "Add measurement" : "Submit report"}</span><span class="submit-reward points-value${changed ? " changed" : ""}">+${p.total}</span>`;
+    const btn = body.querySelector('[data-act="submit"]'); if(btn) btn.innerHTML = p.blocked ? `<span>Already measured · Available again in ${waitText(p.blocked)}</span>` : `<span>${d.dup ? "Add measurement" : "Submit report"}</span><span class="submit-reward points-value${changed ? " changed" : ""}">+${p.total}</span>`;
     d.motionPreviousPoints = p.total;
     ["type", "risk", "size"].forEach(key => { const field = map[key]; if(!field) return; field.classList.toggle("field-changed", !!d.edited?.[key]); });
     const complaint = body.querySelector("#fComplaint")?.closest(".card"); if(complaint) complaint.classList.toggle("field-changed", !!d.edited?.complaint);
     let feedback = body.querySelector("#submitFeedback"); if(!feedback && btn){ feedback = document.createElement("div"); feedback.id = "submitFeedback"; feedback.className = "submit-feedback"; feedback.setAttribute("role", "status"); feedback.setAttribute("aria-live", "polite"); btn.insertAdjacentElement("afterend", feedback); }
-    if(feedback){ feedback.className = "submit-feedback" + (S.submitError ? " error" : ""); feedback.innerHTML = S.submitError ? `<b>${S.submitError.title}</b><span>${S.submitError.message}</span>` : "<span>Points and mission progress are added only after submission succeeds.</span>"; }
-    if(btn){ btn.setAttribute("aria-busy", "false"); if(S.submitError?.retry) btn.querySelector("span:first-child").textContent = "Try again"; }
+    if(feedback){ feedback.className = "submit-feedback" + (S.submitError ? " error" : ""); feedback.innerHTML = S.submitError ? `<b>${S.submitError.title}</b><span>${S.submitError.message}</span>` : p.blocked ? "<span>Re-measurement rewards are limited to one per hazard every 24 hours. A different hazard can be reported now.</span>" : "<span>Points and mission progress are added only after submission succeeds.</span>"; }
+    if(btn){ btn.setAttribute("aria-busy", "false"); if(S.submitError?.retry && !p.blocked) btn.querySelector("span:first-child").textContent = "Try again"; }
     d.motionEdited = null;
   }
   window.renderReview = function(){ baseReview(); decorateReview(); };
   function updateReviewPoints(){
-    const d = S.draft, body = q("#reviewBody"); if(!d || !body) return; const p = pointsFor(d), changed = d.motionPreviousPoints !== undefined && d.motionPreviousPoints !== p.total, ledger = body.querySelector(".ledger");
+    const d = S.draft, body = q("#reviewBody"); if(!d || !body) return; const p = pointsFor(d); if(p.blocked) return; const changed = d.motionPreviousPoints !== undefined && d.motionPreviousPoints !== p.total, ledger = body.querySelector(".ledger");
     if(ledger) ledger.innerHTML = p.lines.map(([l, v]) => `<div class="li"><span>${esc(l)}</span><b class="points-value${changed ? " changed" : ""}">+${v}</b></div>`).join("") + (p.note ? `<p class="small muted" style="margin-top:6px">${esc(p.note)}</p>` : "");
     const reward = body.querySelector(".submit-reward"); if(reward){ reward.textContent = `+${p.total}`; if(changed) replay(reward, "changed"); } d.motionPreviousPoints = p.total;
   }
@@ -251,16 +251,18 @@
   const baseSubmit = window.submit;
   window.submit = async function(){
     const d = S.draft; if(!d || S.busy) return; const dong = d.loc?.dong;
-    const duplicate = findDup(d), recentDuplicate = duplicate && myReports().find(r => r.issueId === duplicate.id && Date.now() - r.createdAt < 864e5);
     S.submitError = null;
     S.motionSubmit = {previousTotal: score(), previousBoardScore: S.board?.dongs?.[dong] || 0, previousGoal: rawMissionProgress(dong), previousRank: BGProgress.standing(S.board, names(), dong).rank};
     const pending = baseSubmit();
     queueMicrotask(() => { const b = q('[data-act="submit"]'); if(b && S.busy){ b.disabled = true; b.setAttribute("aria-busy", "true"); b.classList.add("is-loading"); b.innerHTML = '<span class="motion-spinner" aria-hidden="true"></span><span>Submitting…</span>'; } });
-    await pending;
-    if(S.screen === "review"){
-      S.submitError = recentDuplicate ? {title: "Not submitted", message: "You already measured this issue in the last 24 hours. No points or mission progress were added.", retry: false}
+    const outcome = await pending;
+    /* One message per event: a locked re-measurement shows inline on the button; anything else is one error card. */
+    if(S.screen === "review" && outcome && outcome !== "ok"){
+      S.submitError = outcome === "measured" ? null
+        : outcome === "cap" ? {title: "Daily limit reached", message: `You've sent ${DAILY_CAP} reports today. Try again tomorrow. No points or mission progress were added.`, retry: false}
         : {title: "Submission failed", message: "Check your connection, then try again. No points or mission progress were added.", retry: true};
-      window.renderReview(); announce(`${S.submitError.title}. ${S.submitError.message}`); window.BGFx?.cue("error");
+      window.renderReview(); window.BGFx?.cue("error");
+      announce(S.submitError ? `${S.submitError.title}. ${S.submitError.message}` : `Already measured. Available again in ${waitText(measuredUntil(d))}.`);
     } else if(S.screen === "done"){ syncMissionStore(); }
   };
 
@@ -307,19 +309,20 @@
           <div class="ledger"><div class="li"><span>Total contribution</span><b class="num">${fmt(sc.total)}</b></div><div class="li"><span>Available now</span><b class="num">${fmt(sc.available)}</b></div></div>
           <p class="outcome-note">${L.points ? "These points become available once the district receives the report." : "No points for this submission."}</p></details>
       </section>
-      ${unlocked.map(b => `<section class="card badge-unlock" aria-label="Badge unlocked"><span class="badge-medal" data-badge="${b.id}" aria-hidden="true">${window.BGShell.badgeIcon(b.id)}</span><div><p class="success-card-label">Badge unlocked</p><h3>${esc(b.name)}</h3><p class="outcome-note">${esc(b.note)}</p></div></section>`).join("")}
+      ${unlocked.map(b => window.BGShell.unlockCard(b)).join("")}
       <button class="btn lg" data-go="board">View neighborhood</button>
       <button class="btn soft" data-act="toSafety" data-id="${r.id}">Also file on Safety e-Report</button>
       <button class="btn ghost" data-go="home">Done</button>`;
     syncMissionStore();
     if(!fresh) return;
-    announce(`${r.remeasure ? "Measurement added" : "Report submitted"}. ${hoodHead.replace(/<[^>]+>/g, "")}, neighborhood score ${hoodNow}. Weekly mission ${g(goal)} of ${WEEKLY_GOAL}. You earned ${L.points} personal points.${unlocked.length ? ` Badge unlocked: ${unlocked.map(b => b.name).join(", ")}.` : ""}`);
+    announce(`${r.remeasure ? "Measurement added" : "Report submitted"}. ${hoodHead.replace(/<[^>]+>/g, "")}, neighborhood score ${hoodNow}. Weekly mission ${g(goal)} of ${WEEKLY_GOAL}. You earned ${L.points} personal points.`);
     window.BGFx?.cue(full ? "success" : "tick");
     later(() => {
       count(q("#hoodScore"), hoodWas, hoodNow, 750); count(q("#bigPts"), 0, L.points, 650, n => String(Math.round(n)));
       count(q("#successGoalCount"), g(oldGoal), g(goal), 650, n => String(Math.round(n)));
       const bar = q("#goalBar"); if(bar) bar.style.width = `${g(goal) / WEEKLY_GOAL * 100}%`;
     });
+    if(unlocked.length) setTimeout(() => window.BGShell.celebrateCoins(unlocked), reduced() ? 100 : 650);
   };
 
   /* ================= Neighborhood (leaderboard, mission, movement, impact) ================= */

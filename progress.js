@@ -1,4 +1,4 @@
-/* BaroGochyeo — score, mission, badge and leaderboard maths.
+/* BaroGochyeo — score, mission, Achievement Coin and leaderboard maths.
    Pure functions only: no DOM, no storage. Every screen reads its numbers from here,
    so a backend can later supply the same inputs and keep the UI unchanged. */
 (() => {
@@ -87,19 +87,17 @@
     return { items, total: items.length, completed: items.filter(i => i.done).length };
   }
 
-  /* Badges are permanent achievements. They never reset and are not points, missions or rank.
-     have / need = progress toward the unlock condition. */
-  function badges({ reports, progress, missionsDone = 0 }) {
+  /* Private, permanent Achievement Coins. Weekly mission history is independent. */
+  function coins({ reports, progress, statusOf = () => "submitted" }) {
     const ok = reports.filter(counted);
     const list = [
-      { id: "first", name: "First report", note: "You sent your first hazard report.", req: "Submit one new hazard report.", earned: ok.some(r => !r.remeasure), need: 1 },
-      { id: "measured", name: "Measured", note: "You measured a hazard, not just photographed it.", req: "Measure a hazard with AR or a reference object.", earned: ok.some(r => r.sizeMode === "ar" || r.sizeMode === "measured"), need: 1 },
-      { id: "follow", name: "Follow-through", note: "You came back to see what happened to your report.", req: "Open one of your reports after its status changes.", earned: (progress?.reviewWeeks || []).length > 0, need: 1 },
-      { id: "repaired", name: "Issue resolved", note: "A hazard you reported was repaired.", req: "One of your reports reaches Resolved.", earned: ok.some(r => r.bonusClaimed), need: 1 },
-      { id: "week", name: "Mission complete", note: "You finished every personal mission in a single week.", req: "Complete all 3 weekly missions in the same week.", earned: (progress?.fullWeeks || []).length > 0, need: 3, have: missionsDone }
+      { id: "first-report", name: "First Report", note: "Submitted your first eligible neighborhood report.", req: "Submit your first eligible new neighborhood report.", earned: ok.some(r => eligible(r) && !r.remeasure), need: 1 },
+      { id: "measured", name: "Hazard Measured", note: "Measured a hazard with AR or a reference object.", req: "Complete a valid AR or reference-object measurement under the existing measurement rules.", earned: ok.some(r => r.sizeCm > 1 && r.sizeCm < 2000 && (r.sizeMode === "ar" || r.sizeMode === "measured")), started: ok.length > 0, need: 1 },
+      { id: "follow-through", name: "Follow-up", note: "Returned to check a report after its status changed.", req: "Return to one of your reports after its status changes.", earned: !!progress?.coins?.["follow-through"]?.earned || !!progress?.followUpSeen, started: ok.some(r => statusOf(r) !== (progress?.seen?.[r.id] ?? "submitted")), need: 1 },
+      { id: "issue-resolved", name: "Issue Resolved", note: "A hazard you reported was resolved.", req: "One of your reports reaches the resolved or repaired state.", earned: ok.some(r => r.bonusClaimed || statusOf(r) === "resolved"), started: ok.some(r => statusOf(r) !== "submitted"), need: 1 }
     ];
-    return list.map(b => { const have = b.earned ? b.need : Math.min(b.have || 0, b.need - 1); return { ...b, have, state: b.earned ? "earned" : have > 0 ? "progress" : "new", at: progress?.badgeAt?.[b.id] || null }; });
+    return list.map(b => { const saved = progress?.coins?.[b.id] || {}; const earned = !!(saved.earned || b.earned); const have = earned ? 1 : Math.min(saved.progress || 0, 1); return { ...b, earned, have, state: earned ? "earned" : (b.started || have > 0) ? "progress" : "new", at: saved.earnedAt || null, viewed: !!saved.detailViewed }; });
   }
 
-  window.BGProgress = { WEEKLY_GOAL, WEEK_MS, eligible, detailed, scores, sampleBoard, rows, standing, goalProgress, missions, lastWeek, badges };
+  window.BGProgress = { WEEKLY_GOAL, WEEK_MS, eligible, detailed, scores, sampleBoard, rows, standing, goalProgress, missions, lastWeek, coins };
 })();

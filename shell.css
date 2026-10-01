@@ -118,9 +118,6 @@ h1:focus,h2:focus{outline:none}
 .outcome-detail summary{min-height:44px;display:flex;align-items:center;font-size:13px}
 .outcome-detail .ledger+.ledger{margin-top:8px;padding-top:8px;border-top:2px solid var(--line)}
 @keyframes outcome-in{from{opacity:0;transform:translateY(12px)}}
-.badge-unlock{display:flex;align-items:center;gap:14px;box-shadow:inset 0 0 0 2px var(--mustard),var(--rest);animation:outcome-in 380ms var(--ease-spring) 520ms both}
-.badge-unlock .badge-medal{animation:badge-pop 620ms var(--ease-spring) 700ms both}
-@keyframes badge-pop{0%{transform:scale(.4) rotate(-20deg);opacity:0}60%{transform:scale(1.12) rotate(4deg);opacity:1}100%{transform:none}}
 
 /* ---------- Report status updates ---------- */
 .item.has-update{box-shadow:inset 0 0 0 2px var(--mustard),var(--rest)}
@@ -154,10 +151,6 @@ h1:focus,h2:focus{outline:none}
 .stat-row span{display:block;font-size:12px;font-weight:800;color:var(--ink-2)}
 .stat-row b{font-family:var(--f-display);font-size:20px;font-weight:900}
 .stat-row b small{font-family:var(--f-body);font-size:11px;font-weight:700;color:var(--ink-2)}
-.badge-medal{width:48px;height:48px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--mustard);color:#183A32;box-shadow:0 3px 0 var(--mustard-dark)}
-.badge-medal[data-badge="follow"]{background:var(--blue);color:#FCFBF7;box-shadow:0 3px 0 var(--low-ink)}
-.badge-medal[data-badge="repaired"]{background:var(--sage);box-shadow:0 3px 0 var(--sage-dark)}
-.badge-medal[data-badge="measured"]{background:var(--coral);color:#26332F;box-shadow:0 3px 0 var(--high-ink)}
 .menu{display:grid;gap:10px}
 .menu .item+.item{margin-top:0}
 .menu .thumb,.setting .thumb{width:44px;height:44px;border-radius:14px}
@@ -235,7 +228,7 @@ h1:focus,h2:focus{outline:none}
 }
 @media (max-height:600px){ .welcome .mascot{width:120px} .splash .mascot{width:120px} }
 @media (prefers-reduced-motion:reduce){
-  .splash .mascot,.splash .wordmark,.splash-line,.welcome .mascot,.outcome-hood,.outcome-mission,.outcome-me,.badge-unlock,.badge-unlock .badge-medal,.badge.just-unlocked .badge-medal,.hood-delta,.gate.leaving{animation:none!important}
+   .splash .mascot,.splash .wordmark,.splash-line,.welcome .mascot,.outcome-hood,.outcome-mission,.outcome-me,.hood-delta,.gate.leaving{animation:none!important}
   .switch i,.switch::before{transition:none}
 }
 .outcome-detail summary{list-style:none;justify-content:space-between}
@@ -253,7 +246,7 @@ details.card>summary{padding:12px 0}
 .btn.soft,.btn.secondary{box-shadow:inset 0 0 0 2px var(--line-2),var(--press-soft)}
 
 /* =====================================================================
-   Mission, Neighborhood, personal missions and badges
+    Mission, Neighborhood, personal missions and Achievement Coins
    Hierarchy comes from scale, colour and spacing. Only grouped content gets a surface.
    ===================================================================== */
 
@@ -416,40 +409,56 @@ details.card>summary{padding:12px 0}
 .lastweek .ok{color:var(--accent-text)}.lastweek .gone{color:var(--high-ink)}
 .obj-foot{font-size:12px;color:var(--ink-2);padding:0 4px}
 
-/* ---------- Badges: a shelf of permanent achievements ---------- */
-.shelf{background:var(--cream-2);border-radius:28px;padding:14px 10px 10px}
-.shelf .section-head{margin:0 6px 6px}
-.badge-row{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
-.badge-btn{width:100%;min-height:44px;border:0;background:none;color:inherit;border-radius:18px;padding:10px 4px;display:grid;justify-items:center;align-content:start;gap:4px;text-align:center}
-.badge-btn b{font-family:var(--f-display);font-size:13px;font-weight:800;line-height:1.2}
-.badge-btn small{font-size:11.5px;font-weight:800;color:var(--ink-2)}
-.badge-btn.earned small{color:var(--accent-text)}
-.badge-btn.is-pressed,.badge-btn:active{background:rgba(24,58,50,.1);transform:translateY(2px)}
-.badge-btn.is-pressed .badge-medal{box-shadow:none;transform:translateY(2px)}
-.badge-medal{position:relative}
-.badge-row .badge-medal{width:58px;height:58px;margin-bottom:4px}
-.badge-medal[data-badge="week"]{background:var(--green);color:#FCFBF7;box-shadow:0 3px 0 var(--green-dark)}
-.medal-check{position:absolute;right:-4px;bottom:-3px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--green-dark);color:#FCFBF7;box-shadow:0 0 0 2px var(--cream-2)}
-.medal-check svg.icon{width:12px;height:12px}
-.progress .badge-medal{filter:saturate(.5) opacity(.72);box-shadow:none}
-.new .badge-medal{background:transparent;color:var(--ink-2);box-shadow:none;border:2px dashed var(--ink-2)}
-.just-unlocked .badge-medal{animation:badge-pop 620ms var(--ease-spring) both}
-.badge-sheet{display:grid;justify-items:center;text-align:center;gap:6px;margin-bottom:14px}
-.badge-medal.lg{width:84px;height:84px;margin:4px 0 6px}
-.badge-medal.lg svg.icon{width:36px;height:36px}
-.badge-state{font-size:12px;font-weight:900;padding:4px 11px;border-radius:999px;background:var(--cream-2);color:var(--ink-2)}
-.badge-sheet.earned .badge-state{background:var(--sage-pale);color:#183A32}
-.badge-mean{font-size:15px;max-width:26ch;margin-top:4px}
-.badge-facts{width:100%;margin:10px 0 6px;text-align:left;border-top:2px dashed var(--line)}
-.badge-facts div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:2px dashed var(--line)}
-.badge-facts dt{flex:none;font-size:13px;font-weight:800;color:var(--ink-2)}
-.badge-facts dd{margin:0;font-weight:700;text-align:right}
-.badge-cheer{position:relative}
-.sheet .badge-cheer .mascot{width:104px;margin:0 auto}
-.pop-bits{position:absolute;left:50%;top:50%;width:0;height:0}
-.pop-bits i{position:absolute;left:-4px;top:-6px;width:8px;height:12px;border-radius:3px;background:var(--c);animation:pop-bit 760ms var(--ease-standard) 220ms both}
-@keyframes pop-bit{from{opacity:1;transform:rotate(var(--a)) translateY(-18px)}to{opacity:0;transform:rotate(var(--a)) translateY(-96px)}}
-.celebrate .badge-medal{animation:badge-pop 620ms var(--ease-spring) 160ms both}
+/* Achievement Coins: open collection on the page background. */
+.coin-shelf{padding:8px 0 12px}
+.coin-shelf .section-head{display:flex;align-items:center;gap:8px;margin:0 0 12px}
+.coin-shelf .section-head h3{margin-right:auto}
+.coin-count{font-size:13px;font-weight:800;color:var(--ink-2);white-space:nowrap}
+.coin-shelf .info-btn{flex:none}
+.coin-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 12px}
+.coin-btn{position:relative;display:grid;justify-items:center;align-content:start;gap:5px;width:100%;min-width:0;min-height:150px;padding:8px 3px;border:0;border-radius:14px;background:transparent;color:var(--ink);text-align:center;cursor:pointer;transition:transform .13s ease,background-color .13s ease}
+.coin-btn .coin-art{width:clamp(76px,23vw,92px);height:auto;aspect-ratio:1;object-fit:contain;margin-bottom:3px;filter:drop-shadow(0 3px 3px rgba(38,51,47,.16))}
+.coin-btn b{font-family:var(--f-display);font-size:16px;font-weight:800;line-height:1.25}
+.coin-state{font-size:13px;font-weight:800;color:var(--ink-2);line-height:1.3}
+.coin-progress{font-size:12px;font-weight:800;color:var(--ink-2)}
+.coin-btn.earned .coin-state{color:var(--green)}
+:root[data-theme="dark"] .coin-btn.earned .coin-state{color:var(--sage)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .coin-btn.earned .coin-state{color:var(--sage)}}
+.coin-btn:active,.coin-btn.is-pressed{transform:translateY(2px);background:rgba(38,51,47,.07)}
+.coin-btn:active .coin-art,.coin-btn.is-pressed .coin-art{filter:brightness(.88) drop-shadow(0 1px 1px rgba(38,51,47,.12))}
+.coin-btn.is-held{transform:translateY(2px);background:rgba(38,51,47,.11)}
+.coin-btn.is-held .coin-art{filter:brightness(.78) drop-shadow(0 1px 1px rgba(38,51,47,.1))}
+.coin-btn:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.coin-new{position:absolute;top:4px;right:13%;background:var(--coral);color:#26332F;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:900}
+.coin-summary{display:flex;justify-content:space-between;margin:9px 2px 0;color:var(--ink-2);font-size:12px;font-weight:800}
+.coin-summary b{color:var(--ink)}
+.coin-sheet{display:grid;justify-items:center;text-align:center;gap:8px;margin-bottom:16px}
+.coin-sheet .coin-art.large{width:min(148px,38vw);height:auto;object-fit:contain}
+.coin-sheet h2{margin:0;font-size:25px}
+.coin-field-label{margin:4px 0 0;color:var(--ink-2);font-size:12px;font-weight:900}
+.coin-meaning{font-size:15px;line-height:1.45;margin:4px 0 8px;max-width:32ch}
+.coin-facts{width:100%;margin:4px 0;text-align:left}
+.coin-facts div{display:grid;gap:4px;padding:9px 0;border-top:1px solid var(--line-2)}
+.coin-facts dt{font-size:12px;font-weight:800;color:var(--ink-2)}
+.coin-facts dd{margin:0;font-size:14px;font-weight:700}
+.coin-unlock{display:flex;align-items:center;gap:12px;padding:13px 8px;min-width:0;border-top:1px solid var(--line-2)}
+.coin-flip{position:relative;flex:none;width:66px;height:66px;transform-style:preserve-3d;animation:coin-turn 850ms ease-out 600ms both}
+.coin-flip .coin-art{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backface-visibility:hidden}
+.coin-flip .coin-color{transform:rotateY(180deg)}
+.coin-unlock-copy{min-width:0;flex:1;animation:coin-copy 230ms ease-out 1200ms both}
+.coin-unlock-copy p{margin:0;font-size:12px;font-weight:900;color:var(--accent-text)}
+.coin-unlock-copy h3{margin:2px 0 0;font-size:18px}
+.coin-particles{position:absolute;inset:50%;pointer-events:none}
+.coin-particles i{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--mustard);animation:coin-spark 340ms ease-out 1120ms both}
+@keyframes coin-turn{0%{transform:scale(.88) rotateY(0)}49%{transform:scale(.94) rotateY(89deg)}100%{transform:scale(1) rotateY(180deg)}}
+@keyframes coin-spark{from{opacity:1;transform:rotate(var(--a)) translateY(-26px)}to{opacity:0;transform:rotate(var(--a)) translateY(-42px)}}
+@keyframes coin-copy{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.new-coin-home{display:flex;align-items:center;gap:12px;margin-top:12px;padding:9px 0;border-top:1px solid var(--line-2)}
+.new-coin-home .coin-art{width:42px;height:42px;object-fit:contain}
+.new-coin-home span{flex:1;display:grid;font-size:12px;font-weight:800;color:var(--ink-2)}
+.new-coin-home b{font-size:15px;color:var(--ink)}
+@media(max-width:350px){.coin-btn .coin-art{width:72px}.coin-grid{gap:13px 6px}.coin-btn b{font-size:14px}.coin-shelf .section-head h3{font-size:18px}.coin-count{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.coin-flip{animation:coin-fade 180ms ease-out both}.coin-flip .coin-silver,.coin-particles{display:none}.coin-flip .coin-color{transform:none}.coin-unlock-copy{animation:none}@keyframes coin-fade{from{opacity:.45}to{opacity:1}}}
 
 @media (max-width:350px){
   .ms-count strong{font-size:50px}.ms-msg{font-size:17px}.ms-baro{width:58px;height:58px}.ms-baro img{width:50px}

@@ -136,7 +136,7 @@ svg.icon *{stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .back:active,.icon-btn:active{transform:translateY(2px);box-shadow:inset 0 0 0 2px var(--line)}
 .top{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s5)}
 
-/* ---- Badges ---- */
+/* ---- Chips ---- */
 .chip{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none;padding:5px 11px;border-radius:var(--r-chip);font-size:13px;font-weight:800;background:var(--cream-2);color:var(--green-dark)}
 :root[data-theme="dark"] .chip{color:var(--ink)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .chip{color:var(--ink)}}
@@ -380,6 +380,7 @@ details summary{cursor:pointer;font-family:var(--f-display);font-weight:800;colo
     <span class="mission-link">View mission <span aria-hidden="true">→</span></span>
   </button>
   <div id="nextMission" aria-live="off"></div>
+  <div id="newCoinHome"></div>
   <div class="card" style="margin-top:16px">
     <div class="row between"><h2 class="h3">Nearby issues</h2><button class="link-btn" data-go="map">Within 1 km <span aria-hidden="true">→</span></button></div>
     <div class="counts" id="homeCounts"></div>
@@ -735,8 +736,10 @@ function scanFootBlocked(kind){
     <div class="hud-actions"><button class="btn accent" data-act="pickCam">Take a photo</button><button class="btn alt" data-act="pickLib">Choose from gallery</button>
     ${denied?`<button class="btn alt" data-act="retryCam">Try the camera again</button>`:""}<button class="btn alt" data-act="useSample">Use sample photo (demo)</button></div>`;
 }
-async function openScan(){
-  S.draft = {id:uid(), edited:{}};
+/* keep=true is a retake: same draft ID and location, new photo. Otherwise a fresh draft with a new ID. */
+async function openScan(keep){
+  const prev = S.draft;
+  S.draft = keep && prev ? {id:prev.id, edited:{}, loc:prev.loc, newIssue:prev.newIssue} : {id:uid(), edited:{}};
   $("#scan").classList.add("on"); $("#still").hidden = true; $("#reticle").hidden = false; $("#safety").hidden = false;
   $("#scanMode").textContent = "Starting camera"; scanSource(null); $("#scanFoot").innerHTML = "";
   document.body.style.overflow = "hidden";
@@ -860,7 +863,7 @@ function templates(d){
   };
 }
 function findDup(d){
-  if(!d.type || !d.loc) return null;
+  if(!d.type || !d.loc || d.newIssue || d.loc.mode!=="gps") return null;
   let best=null, bd=Infinity;
   for(const i of S.issues.values()){
     if(i.type!==d.type || i.status==="resolved" || i.status==="rejected") continue;
@@ -870,11 +873,19 @@ function findDup(d){
 }
 
 /* ---------- S3b Review ---------- */
+const REMEASURE_MS = 864e5;
+/* If this person added to the matched issue within 24 hours, the time the re-measurement reward unlocks again. */
+function measuredUntil(d){
+  if(!d?.dup) return 0;
+  const recent = myReports().filter(r=>r.issueId===d.dup.id && Date.now()-r.createdAt < REMEASURE_MS).sort((a,b)=>b.createdAt-a.createdAt)[0];
+  return recent ? recent.createdAt + REMEASURE_MS : 0;
+}
+function waitText(until){ const m = Math.max(1, Math.ceil((until-Date.now())/6e4)), h = Math.floor(m/60); return h ? `${h} h ${m%60} min` : `${m} min`; }
 function pointsFor(d){
   const tooOld = d.source==="file" && (Date.now()-d.capturedAt) > OLD_PHOTO_MS;
   if(tooOld) return {total:0, lines:[["Photo older than 10 minutes",0]], note:"Photos from your gallery must be taken within 10 minutes to earn points."};
   if(d.source==="sample") return {total:0, lines:[["Sample media (demo)",0]], note:"Sample media shows the flow only. It earns no points and no mission progress."};
-  if(d.dup) return {total:5, lines:[["Re-measurement",5]]};
+  if(d.dup){ const until = measuredUntil(d); return until ? {total:0, lines:[], blocked:until} : {total:5, lines:[["Re-measurement",5]]}; }
   const aiOk = d.ai && d.ai.confidence >= AI_THRESHOLD && d.ai.type === d.type;
   const complete = d.type && d.risk && d.loc && (d.complaintEn||"").trim().length > 10;
   const lines = [["Valid new report",10]]; if(aiOk) lines.push(["AI analyzed",15]); if(complete) lines.push(["Complete details",5]);
@@ -896,7 +907,8 @@ function renderReview(){
     ${d.measuring ? measurePanel() : ""}
     ${d.source==="sample" ? `<div class="banner warn" role="note"><b class="banner-tag">Sample media</b><span>Demo photo, not from your camera.</span></div>` : ""}
     ${d.loc?.mode==="demo" ? `<div class="banner warn">${esc(d.loc.why||"")}</div>` : ""}
-    ${d.dup ? `<div class="banner info"><b style="flex:none">${d.dup.reportCount}</b><span>${d.dup.reportCount===1?"person has":"people have"} already reported this. Your scan adds a new measurement to its size history.</span></div>` : ""}
+    ${d.dup ? `<div class="banner info"><b style="flex:none">${d.dup.reportCount}</b><span>${p.blocked ? "You measured this hazard in the last 24 hours. If it's a different hazard, start a new report." : `${d.dup.reportCount===1?"person has":"people have"} already reported this. Your scan adds a new measurement to its size history.`}
+      <button type="button" class="link-btn" data-act="newReport" style="display:flex;padding:0">Different hazard? Start a new report <span aria-hidden="true">→</span></button></span></div>` : ""}
     <div class="card fields">
       <div class="f"><span class="k" style="display:flex;align-items:center;gap:6px">Issue${d.ai?` <span class="chip ai-chip">${window.BG_STANDALONE?"Sample AI":"AI"}</span>`:""}</span><div class="v">
         <select id="fType" aria-label="Issue type">${d.type?"":`<option value="">Choose…</option>`}${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${k===d.type?"selected":""}>${v.en}</option>`).join("")}</select>
@@ -921,11 +933,11 @@ function renderReview(){
       <textarea id="fComplaint" aria-label="Complaint text">${esc(d.showKo ? d.complaintKo : d.complaintEn)}</textarea>
       ${(d.edited.type||d.edited.size) && S.sample ? `<button class="btn soft small" style="margin-top:8px" data-act="rewrite">Rewrite for my changes</button>`:""}
     </div>
-    <div class="card ledger">${p.lines.map(([l,v])=>`<div class="li"><span>${l}</span><b>+${v}</b></div>`).join("")}
+    <div class="card ledger">${p.blocked ? `<div class="li"><span>Re-measurement</span><b>Already measured</b></div><p class="small muted" style="margin-top:6px">Available again in ${waitText(p.blocked)}. One re-measurement reward per hazard every 24 hours.</p>` : ""}${p.lines.map(([l,v])=>`<div class="li"><span>${l}</span><b>+${v}</b></div>`).join("")}
       ${p.note?`<p class="small muted" style="margin-top:6px">${p.note}</p>`:""}</div>
-    <button class="btn lg" data-act="submit" ${d.type&&d.loc&&!d.measuring?"":"disabled"} style="display:flex;align-items:center;justify-content:center;gap:8px">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-      ${d.dup?"Add measurement":"Submit Report"} · +${p.total} pts
+    <button class="btn lg" data-act="submit" ${d.type&&d.loc&&!d.measuring&&!p.blocked?"":"disabled"} style="display:flex;align-items:center;justify-content:center;gap:8px">
+      ${p.blocked ? `Already measured · Available again in ${waitText(p.blocked)}` : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      ${d.dup?"Add measurement":"Submit Report"} · +${p.total} pts`}
     </button>`;
   if(d.measuring) drawMeasure();
 }
@@ -949,14 +961,12 @@ function drawMeasure(){
 }
 
 /* ---------- Submit ---------- */
+/* Returns "ok", "cap" (daily limit), "measured" (re-measurement reward locked for 24 hours) or "error". */
 async function submit(){
   const d = S.draft; if(!d || S.busy) return;
-  if(todaysCount() >= DAILY_CAP){ toast(`You've reached ${DAILY_CAP} reports today.`); return; }
+  if(todaysCount() >= DAILY_CAP) return "cap";
   d.dup = findDup(d);
-  if(d.dup){
-    const recent = myReports().find(r=>r.issueId===d.dup.id && Date.now()-r.createdAt < 864e5);
-    if(recent){ toast("You already measured this in the last 24 hours."); return; }
-  }
+  if(measuredUntil(d)) return "measured";
   S.busy = true; const btn = document.querySelector('[data-act="submit"]'); if(btn){ btn.disabled = true; btn.textContent = "Submitting…"; }
   try{
     const p = pointsFor(d); const now = Date.now();
@@ -969,7 +979,7 @@ async function submit(){
       issue = {id:"i_"+d.id, type:d.type, risk:d.risk, lat:d.loc.lat, lng:d.loc.lng, dong:d.loc.dong, status:"submitted",
         reportCount:1, sizes: d.sizeCm?[{cm:Math.round(d.sizeCm), at:now}]:[], createdAt:now, updatedAt:now, thumb:d.thumb||null, complaintEn:d.complaintEn};
     }
-    if(S.mine.has("r_"+d.id)){ S.draft = null; return; } /* this draft was already submitted: never award twice */
+    if(S.mine.has("r_"+d.id)){ S.draft = null; return "ok"; } /* this draft was already submitted: never award twice */
     await saveIssue(issue);
     const aiOk = p.lines.some(l=>l[0]==="AI analyzed");
     if(p.total || aiOk) await addToBoard(d.loc.dong, p.total, aiOk?1:0);
@@ -980,7 +990,8 @@ async function submit(){
     if(!S.profile) await saveProfile({id:"profile", kind:"profile", base:0, redeemed:0});
     S.last = {rep, issue, points:p.total, aiOk};
     S.draft = null; window.go("done"); window.renderDone();
-  } catch(e){ console.warn(e); toast("Couldn't submit. Check your connection and try again."); if(btn){ btn.disabled=false; } }
+    return "ok";
+  } catch(e){ console.warn(e); if(btn){ btn.disabled=false; } return "error"; }
   finally { S.busy = false; }
 }
 
@@ -1093,6 +1104,7 @@ function renderDetail(){
   const iss = S.issues.get(r.issueId); const st = r.reversed ? "rejected" : (iss?.status || "submitted");
   const idx = STATUS.indexOf(st);
   const changed = window.BGShell?.noteViewed(r, st);
+  const newlyEarned = changed ? (window.BGShell?.collectUnlocks() || []) : [];
   $("#detailBody").innerHTML = `
     ${changed ? `<div class="banner info status-changed" role="status">${mImg("front")}<span><b class="banner-tag">Status update</b> Now <b>${STATUS_LABEL[st]}</b>${changed.from?` (was ${STATUS_LABEL[changed.from]||changed.from})`:""}.</span></div>` : ""}
     ${r.thumb?`<img src="${r.thumb}" alt="Report photo" style="width:100%;border-radius:var(--r-md);max-height:260px;object-fit:cover">`:""}
@@ -1108,11 +1120,13 @@ function renderDetail(){
       `<ul class="tl">${STATUS.map((s,i)=>`<li class="${i<=idx?"done":""} ${i===idx?"cur":""}"><i></i>${STATUS_LABEL[s]}</li>`).join("")}</ul>`}</div>
     ${iss ? `<div class="card">${sparkline(iss.sizes) || `<h3>Size history</h3><p class="muted small" style="margin-top:6px">Appears when someone re-measures this hazard.</p>`}</div>` : ""}
     <div class="card"><h3 style="margin-bottom:8px">Complaint sent</h3><p>${esc(r.complaintEn)}</p><p class="muted small" style="margin-top:8px">${esc(r.complaintKo)}</p></div>
+    ${newlyEarned.map(b => window.BGShell.unlockCard(b)).join("")}
     <button class="btn soft" data-act="toSafety" data-id="${r.id}">File on 안전신문고</button>
     ${iss && st!=="resolved" && st!=="rejected" ? `<details class="card"><summary>Demo controls</summary>
       <p class="small muted" style="margin:8px 0">Simulates the district updating this report.</p>
       <div class="row"><button class="btn small" data-act="advance" data-id="${iss.id}">Move to ${STATUS_LABEL[STATUS[idx+1]]}</button>
-      <button class="btn ghost small" data-act="reject" data-id="${iss.id}">Reject</button></div></details>` : ""}`;
+       <button class="btn ghost small" data-act="reject" data-id="${iss.id}">Reject</button></div></details>` : ""}`;
+  if(newlyEarned.length) setTimeout(() => window.BGShell?.celebrateCoins(newlyEarned), 400);
 }
 async function setStatus(id, status){
   const i = S.issues.get(id); if(!i) return;
@@ -1217,8 +1231,8 @@ async function measureAR(){
   if(await arSupported()){
     try{
       const cm = await arMeasure();
-      if(cm && cm > 1){ Object.assign(S.draft, {sizeCm:cm, sizeMode:"ar", sizeBasis:"AR ground measurement"}); S.draft.edited.size = true; toast(`Measured ≈ ${Math.round(cm)} cm`); }
-      return window.renderReview();
+      if(cm && cm > 1 && cm < 2000){ Object.assign(S.draft, {sizeCm:cm, sizeMode:"ar", sizeBasis:"AR ground measurement"}); S.draft.edited.size = true; toast(`Measured ≈ ${Math.round(cm)} cm`); window.renderReview(); showMeasurementUnlock(cm); }
+      return;
     }catch(e){ console.warn(e); return arHelp("AR couldn't start in this view."); }
   }
   arHelp("AR measurement isn't available in this view.");
@@ -1238,16 +1252,23 @@ window.addEventListener("message", e => {
   const m = e.data; if(!m || m.type !== "barogochyeo-ar" || !S.draft) return;
   const cm = Number(m.cm); if(!(cm > 1 && cm < 2000)) return;
   Object.assign(S.draft, {sizeCm:cm, sizeMode:"ar", sizeBasis:"AR ground measurement"}); S.draft.edited.size = true;
-  closeSheet(); if(S.screen === "review") renderReview(); toast(`AR size received: ≈ ${Math.round(cm)} cm`);
+  closeSheet(); if(S.screen === "review") window.renderReview(); toast(`AR size received: ≈ ${Math.round(cm)} cm`); showMeasurementUnlock(cm);
 });
+function showMeasurementUnlock(cm){
+  const b = window.BGShell?.markMeasurement(cm); if(!b) return;
+  const body = $("#reviewBody"); if(body) body.insertAdjacentHTML("afterbegin", window.BGShell.unlockCard(b));
+  setTimeout(() => window.BGShell?.celebrateCoins([b]), 500);
+}
 
 /* ---------- Sheet ---------- */
 function openSheet(html){
-  const sh = $("#sheet"); if(!$("#veil").classList.contains("on")) openSheet.from = document.activeElement;
+  const sh = $("#sheet"); if(!$("#veil").classList.contains("on")){ openSheet.from = document.activeElement; openSheet.coinId = openSheet.from?.dataset?.id || null; }
   sh.innerHTML = html; const h = sh.querySelector("h2"); if(h){ h.id = "sheetTitle"; sh.setAttribute("aria-labelledby","sheetTitle"); }
-  $("#veil").classList.add("on"); setTimeout(()=>sh.querySelector("button,a,textarea,input")?.focus(), 30);
+  sh.removeAttribute("aria-describedby"); $("#veil").classList.add("on");
+  $("#app").inert = true; $("#tabbar").inert = true; document.body.style.overflow = "hidden";
+  setTimeout(()=>sh.querySelector("button,a,textarea,input")?.focus(), 30);
 }
-function closeSheet(){ if(!$("#veil").classList.contains("on")) return; $("#veil").classList.remove("on"); openSheet.from?.focus?.({preventScroll:true}); openSheet.from = null; }
+function closeSheet(){ if(!$("#veil").classList.contains("on")) return; $("#veil").classList.remove("on"); $("#app").inert = false; $("#tabbar").inert = false; document.body.style.overflow = ""; const target = openSheet.coinId ? [...document.querySelectorAll('[data-shell="coin"]')].find(el => el.dataset.id === openSheet.coinId) : null; (target || openSheet.from)?.focus?.({preventScroll:true}); openSheet.from = null; openSheet.coinId = null; }
 
 /* ---------- Events ---------- */
 document.addEventListener("click", async e => {
@@ -1265,20 +1286,21 @@ document.addEventListener("click", async e => {
   if(a==="shoot") return shoot();
   if(a==="pickCam") return $("#fileCam").click();
   if(a==="pickLib") return $("#fileLib").click();
-  if(a==="retake"){ closeSheet(); closeScan(); return window.openScan(); }
-  if(a==="retryCam"){ closeScan(); return window.openScan(); }
+  if(a==="retake"){ closeSheet(); closeScan(); return window.openScan(true); }
+  if(a==="retryCam"){ closeScan(); return window.openScan(true); }
+  if(a==="newReport" && S.draft){ saveComplaint(); S.draft = {...S.draft, id:uid(), newIssue:true, dup:null, motionPreviousPoints:undefined}; S.submitError = null; window.renderReview(); window.BGJuice?.announce("Started a new report for a different hazard."); return; }
   if(a==="useSample"){ const blob = await samplePhoto(); return window.handlePhoto(blob, Date.now(), "sample"); }
   if(a==="scoreInfo") return window.BGShell?.scoreInfo();
   if(a==="manual"){ closeSheet(); closeScan(); const d=S.draft; if(!d.loc) d.loc = S.loc || await (S.locP || locate()); Object.assign(d, {ai:null, type:null, risk:"medium"}); Object.assign(d, templates(d)); return window.go("review"); }
-  if(a==="reviewBack"){ go("home"); S.draft = null; return window.openScan(); }
+  if(a==="reviewBack"){ go("home"); return window.openScan(true); }
   if(a==="measure"){ saveComplaint(); S.draft.measuring = {pts:[], ref:"a4"}; return window.renderReview(); }
   if(a==="measureCancel"){ S.draft.measuring = null; return window.renderReview(); }
   if(a==="measureReset"){ S.draft.measuring.pts = []; return window.renderReview(); }
-  if(a==="measureDone"){ const cm = calcMeasure(); Object.assign(S.draft, {sizeCm:cm, sizeMode:"measured", sizeBasis:REFS[S.draft.measuring.ref].label, measuring:null}); S.draft.edited.size = true; return window.renderReview(); }
+  if(a==="measureDone"){ const cm = calcMeasure(); if(!(cm > 1 && cm < 2000)){ toast("Measurement must be between 1 and 2000 cm."); return; } Object.assign(S.draft, {sizeCm:cm, sizeMode:"measured", sizeBasis:REFS[S.draft.measuring.ref].label, measuring:null}); S.draft.edited.size = true; window.renderReview(); return showMeasurementUnlock(cm); }
   if(a==="rewrite") return rewrite();
   if(a==="measureAR") return measureAR();
   if(a==="openArPage"){ window.open(S.config.arUrl, "_blank"); return; }
-  if(a==="arManualUse"){ const cm = Number(($("#arManual")?.value||"").replace(",", ".")); if(!(cm>1 && cm<2000)){ toast("Enter a size between 1 and 2000 cm."); return; } Object.assign(S.draft, {sizeCm:cm, sizeMode:"ar", sizeBasis:"AR ground measurement"}); S.draft.edited.size = true; closeSheet(); return window.renderReview(); }
+  if(a==="arManualUse"){ const cm = Number(($("#arManual")?.value||"").replace(",", ".")); if(!(cm>1 && cm<2000)){ toast("Enter a size between 1 and 2000 cm."); return; } Object.assign(S.draft, {sizeCm:cm, sizeMode:"ar", sizeBasis:"AR ground measurement"}); S.draft.edited.size = true; closeSheet(); window.renderReview(); return showMeasurementUnlock(cm); }
   if(a==="arToPhoto"){ closeSheet(); saveComplaint(); S.draft.measuring = {pts:[], ref:"a4"}; return window.renderReview(); }
   if(a==="submit"){ saveComplaint(); return window.submit(); }
   if(a==="copyComplaint"){
